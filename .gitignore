@@ -9,6 +9,9 @@ node_modules/
 *.db-shm
 *.db-wal
 
+# Imágenes subidas por el admin (se regeneran en cada instalación)
+public/uploads/
+
 # Logs
 *.log
 npm-debug.log*
