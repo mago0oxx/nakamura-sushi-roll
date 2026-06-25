@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pago — Nakamura Sushi Roll</title>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600&family=Manrope:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{--negro:#0B0A08;--carbon:#15130F;--linea:#2E2A20;--hueso:#EFE8D8;--hueso-2:#A89E8C;--oro:#D4AF37;--oro-claro:#EDD27E;--sello:#B5392A;--verde:#1FA855;--rojo:#E05252}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--negro);color:var(--hueso);font-family:'Manrope',sans-serif;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;-webkit-font-smoothing:antialiased}
+.card{background:var(--carbon);border:1px solid var(--linea);border-radius:20px;padding:40px 36px;max-width:460px;width:100%;text-align:center}
+.icon{font-size:52px;margin-bottom:20px;display:block}
+h1{font-family:'Cinzel',serif;font-size:22px;font-weight:600;margin-bottom:8px}
+p{color:var(--hueso-2);font-size:14px;line-height:1.6;margin-bottom:10px}
+.order-id{font-family:'Cinzel',serif;font-size:13px;color:var(--oro);letter-spacing:.12em;margin:16px 0;display:block}
+.btn{display:inline-block;background:linear-gradient(120deg,#9C7E2C,var(--oro) 50%,var(--oro-claro));color:#1A1505;border:none;padding:14px 30px;border-radius:99px;font-size:14px;font-weight:800;cursor:pointer;text-decoration:none;margin-top:16px;transition:transform .15s}
+.btn:hover{transform:translateY(-2px)}
+.btn-wa{background:#1FA855;color:#06130B;display:inline-block;padding:13px 28px;border-radius:99px;font-size:14px;font-weight:800;text-decoration:none;margin-top:10px;transition:transform .15s;border:none;cursor:pointer}
+.btn-wa:hover{transform:translateY(-1px)}
+</style>
+</head>
+<body>
+<div class="card" id="card">
+  <span class="icon" id="ico">⏳</span>
+  <h1 id="title">Verificando pago…</h1>
+  <p id="msg">Por favor, esperá un momento.</p>
+  <span class="order-id" id="orderId"></span>
+  <div id="actions"></div>
+</div>
+
+<script>
+const params = new URLSearchParams(location.search);
+const path   = location.pathname;
+const orderId = params.get('order') || '';
+
+const ico    = document.getElementById('ico');
+const title  = document.getElementById('title');
+const msg    = document.getElementById('msg');
+const oidEl  = document.getElementById('orderId');
+const acts   = document.getElementById('actions');
+
+if (orderId) oidEl.textContent = 'Orden ' + orderId;
+
+function render(state) {
+  if (state === 'success' || path.includes('exitoso')) {
+    ico.textContent   = '🎉';
+    title.textContent = '¡Pago confirmado!';
+    msg.innerHTML     = 'Tu pago fue procesado exitosamente.<br>Comenzamos a preparar tu pedido de inmediato.';
+    acts.innerHTML    = `
+      <br>
+      <p style="font-size:13px;color:var(--hueso-2)">Te notificaremos por WhatsApp cuando esté listo.</p>
+      <a class="btn" href="/">Seguir comprando</a>
+    `;
+  } else if (state === 'failure' || path.includes('fallido')) {
+    ico.textContent   = '❌';
+    title.textContent = 'Pago no procesado';
+    msg.innerHTML     = 'El pago no pudo completarse. Podés intentar de nuevo<br>o elegir otro método de pago.';
+    acts.innerHTML    = `
+      <br>
+      <a class="btn" href="/">Volver al menú</a>
+    `;
+  } else if (state === 'pending' || path.includes('pendiente')) {
+    ico.textContent   = '⏳';
+    title.textContent = 'Pago pendiente';
+    msg.innerHTML     = 'Tu pago está siendo procesado. Recibirás una confirmación<br>cuando se acredite.';
+    acts.innerHTML    = `
+      <br>
+      <a class="btn" href="/">Volver al menú</a>
+    `;
+  }
+}
+
+// Detectar estado por URL
+if      (path.includes('exitoso'))  render('success');
+else if (path.includes('fallido'))  render('failure');
+else if (path.includes('pendiente'))render('pending');
+else {
+  // Consultar estado real del pedido
+  if (orderId) {
+    fetch('/api/orders/' + orderId)
+      .then(r => r.json())
+      .then(o => {
+        if      (o.status === 'pagado')   render('success');
+        else if (o.status === 'cancelado')render('failure');
+        else                              render('pending');
+      })
+      .catch(() => render('pending'));
+  } else {
+    render('pending');
+  }
+}
+</script>
+</body>
+</html>

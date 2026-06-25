@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git --version)",
+      "Bash(gh --version)",
+      "Bash(mkdir -p \"C:\\\\Users\\\\Admin\\\\Claude\\\\Projects\\\\Nakamura sushi roll\\\\.claude\" 2>/dev/null; echo done)",
+      "mcp__Claude_Preview__preview_start",
+      "Bash(npm install *)"
+    ]
+  }
+}
