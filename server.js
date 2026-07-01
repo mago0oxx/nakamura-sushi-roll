@@ -4,8 +4,10 @@ const express  = require('express');
 const cors     = require('cors');
 const path     = require('path');
 const { v4: uuidv4 } = require('uuid');
-const fs     = require('fs');
-const multer = require('multer');
+const fs       = require('fs');
+const multer   = require('multer');
+const cloudinary = require('cloudinary').v2;
+const { Readable } = require('stream');
 const {
   db,
   getOrders, getOrder, createOrder, updateOrderStatus, updateOrderPayment,
@@ -13,16 +15,25 @@ const {
   getSetting, getAllSettings, updateSetting,
 } = require('./database');
 
-const uploadsDir = path.join(__dirname, 'public', 'uploads');
-if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key:    process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
 
-const storage = multer.diskStorage({
-  destination: uploadsDir,
-  filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname).toLowerCase();
-    cb(null, `menu-${req.params.id}${ext}`);
+// Multer en memoria (no disco) para subir a Cloudinary
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype.startsWith('image/')) cb(null, true);
+    else cb(new Error('Solo se permiten imágenes'));
   },
 });
+
+// Carpeta local de uploads como fallback
+const uploadsDir = path.join(__dirname, 'public', 'uploads');
+if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
 const upload = multer({
   storage,
   limits: { fileSize: 5 * 1024 * 1024 },
@@ -303,24 +314,34 @@ app.patch('/api/admin/menu/:id', adminAuth, (req, res) => {
   }
 });
 
-// Subir imagen de ítem del menú
-app.post('/api/admin/menu/:id/image', adminAuth, upload.single('image'), (req, res) => {
+// Subir imagen de ítem del menú → Cloudinary
+app.post('/api/admin/menu/:id/image', adminAuth, upload.single('image'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'No se recibió imagen' });
-    const imageUrl = `/uploads/${req.file.filename}`;
-    updateMenuItemImage.run(imageUrl, req.params.id);
-    res.json({ ok: true, image: imageUrl });
+
+    const result = await new Promise((resolve, reject) => {
+      const stream = cloudinary.uploader.upload_stream(
+        { folder: 'nakamura-menu', public_id: `menu-${req.params.id}`, overwrite: true },
+        (err, result) => err ? reject(err) : resolve(result)
+      );
+      Readable.from(req.file.buffer).pipe(stream);
+    });
+
+    updateMenuItemImage.run(result.secure_url, req.params.id);
+    res.json({ ok: true, image: result.secure_url });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
 });
 
 // Eliminar imagen de ítem del menú
-app.delete('/api/admin/menu/:id/image', adminAuth, (req, res) => {
+app.delete('/api/admin/menu/:id/image', adminAuth, async (req, res) => {
   try {
     const items = getMenuItems(false);
     const item = items.find(i => i.id === req.params.id);
-    if (item?.image) {
+    if (item?.image && item.image.includes('cloudinary')) {
+      await cloudinary.uploader.destroy(`nakamura-menu/menu-${req.params.id}`);
+    } else if (item?.image) {
       const filePath = path.join(__dirname, 'public', item.image);
       if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
     }
